@@ -29,6 +29,17 @@ const state = {
   npc: { x: 300, y: 260, dx: 0, dy: 0 },
   menuButtons: [],
   treeNodes: [],
+  joystick: {
+    active: false,
+    pointerId: null,
+    baseX: 0,
+    baseY: 0,
+    knobX: 0,
+    knobY: 0,
+    radius: 58,
+    vectorX: 0,
+    vectorY: 0,
+  },
 };
 
 const events = [
@@ -149,6 +160,7 @@ function randomizeNpcPos() {
 
 function setMenu(message = "Vitej! Vyber si rezim.") {
   state.screen = "menu";
+  stopJoystick();
   state.awaitingChoice = false;
   state.event = null;
   closeModal();
@@ -159,6 +171,7 @@ function setMenu(message = "Vitej! Vyber si rezim.") {
 
 function setTree() {
   state.screen = "tree";
+  stopJoystick();
   closeModal();
   hintLine.textContent = "Klikni na kolecko upgradu nebo Zpet do menu.";
   messageLine.textContent = "Strom vyvoje";
@@ -169,7 +182,7 @@ function startGame() {
   state.screen = "game";
   closeModal();
   resetRun();
-  hintLine.textContent = "Pohyb: WASD/sipky | Interakce: E | Menu: M";
+  hintLine.textContent = "Pohyb: WASD/sipky nebo joystick | Interakce: E | Menu: M";
   messageLine.textContent = "Najdi kolegu a stiskni E.";
   updateStats();
 }
@@ -407,6 +420,46 @@ function drawGame() {
   ctx.fillRect(state.npc.x - NPC_SIZE / 2, state.npc.y - NPC_SIZE / 2, NPC_SIZE, NPC_SIZE);
   ctx.fillStyle = "#ff6b9a";
   ctx.fillRect(state.player.x - PLAYER_SIZE / 2, state.player.y - PLAYER_SIZE / 2, PLAYER_SIZE, PLAYER_SIZE);
+
+  drawMobileControls();
+}
+
+function drawMobileControls() {
+  const baseX = 120;
+  const baseY = canvas.height - 120;
+  const joy = state.joystick;
+  if (!joy.active) {
+    joy.baseX = baseX;
+    joy.baseY = baseY;
+    joy.knobX = baseX;
+    joy.knobY = baseY;
+  }
+
+  ctx.globalAlpha = 0.28;
+  ctx.fillStyle = "#205f8e";
+  ctx.beginPath();
+  ctx.arc(joy.baseX, joy.baseY, joy.radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = 0.5;
+  ctx.fillStyle = "#00a8e8";
+  ctx.beginPath();
+  ctx.arc(joy.knobX, joy.knobY, 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  const actionX = canvas.width - 120;
+  const actionY = canvas.height - 120;
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = "#e63946";
+  ctx.beginPath();
+  ctx.arc(actionX, actionY, 46, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 26px Segoe UI";
+  ctx.textAlign = "center";
+  ctx.fillText("E", actionX, actionY + 9);
+  ctx.globalAlpha = 1;
 }
 
 function tryInteract() {
@@ -429,6 +482,8 @@ function update() {
     if (state.keys.has("arrowright") || state.keys.has("d")) dx += speed;
     if (state.keys.has("arrowup") || state.keys.has("w")) dy -= speed;
     if (state.keys.has("arrowdown") || state.keys.has("s")) dy += speed;
+    dx += state.joystick.vectorX * speed;
+    dy += state.joystick.vectorY * speed;
     state.player.x = clamp(state.player.x + dx, 12, canvas.width - 12);
     state.player.y = clamp(state.player.y + dy, 12, canvas.height - 12);
 
@@ -490,6 +545,73 @@ function handleCanvasClick(ev) {
   }
 }
 
+function toCanvasPosFromTouch(touch) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: ((touch.clientX - rect.left) / rect.width) * canvas.width,
+    y: ((touch.clientY - rect.top) / rect.height) * canvas.height,
+  };
+}
+
+function handleTouchStart(ev) {
+  if (state.screen !== "game") return;
+  for (const touch of ev.changedTouches) {
+    const pos = toCanvasPosFromTouch(touch);
+    const actionX = canvas.width - 120;
+    const actionY = canvas.height - 120;
+    if (Math.hypot(pos.x - actionX, pos.y - actionY) <= 52) {
+      tryInteract();
+      continue;
+    }
+
+    if (!state.joystick.active && pos.x < canvas.width * 0.5 && pos.y > canvas.height * 0.45) {
+      state.joystick.active = true;
+      state.joystick.pointerId = touch.identifier;
+      state.joystick.baseX = pos.x;
+      state.joystick.baseY = pos.y;
+      state.joystick.knobX = pos.x;
+      state.joystick.knobY = pos.y;
+      state.joystick.vectorX = 0;
+      state.joystick.vectorY = 0;
+    }
+  }
+  ev.preventDefault();
+}
+
+function handleTouchMove(ev) {
+  if (!state.joystick.active || state.screen !== "game") return;
+  for (const touch of ev.changedTouches) {
+    if (touch.identifier !== state.joystick.pointerId) continue;
+    const pos = toCanvasPosFromTouch(touch);
+    const dx = pos.x - state.joystick.baseX;
+    const dy = pos.y - state.joystick.baseY;
+    const dist = Math.hypot(dx, dy);
+    const maxR = state.joystick.radius;
+    const ratio = dist > maxR ? maxR / dist : 1;
+    state.joystick.knobX = state.joystick.baseX + dx * ratio;
+    state.joystick.knobY = state.joystick.baseY + dy * ratio;
+    state.joystick.vectorX = clamp(dx / maxR, -1, 1);
+    state.joystick.vectorY = clamp(dy / maxR, -1, 1);
+  }
+  ev.preventDefault();
+}
+
+function stopJoystick() {
+  state.joystick.active = false;
+  state.joystick.pointerId = null;
+  state.joystick.vectorX = 0;
+  state.joystick.vectorY = 0;
+}
+
+function handleTouchEnd(ev) {
+  for (const touch of ev.changedTouches) {
+    if (touch.identifier === state.joystick.pointerId) {
+      stopJoystick();
+    }
+  }
+  ev.preventDefault();
+}
+
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
   if (key === "m") return setMenu();
@@ -503,6 +625,10 @@ window.addEventListener("keyup", (e) => {
 });
 
 canvas.addEventListener("click", handleCanvasClick);
+canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
+canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
+canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
 
 loadProgress();
 setMenu();

@@ -61,6 +61,7 @@ body {
   background: #e8fbff;
   border: 2px solid #8fd2ef;
   border-radius: 12px;
+  touch-action: none;
 }
 
 .overlay {
