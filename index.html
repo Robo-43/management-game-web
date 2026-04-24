@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>2D Management Sim - Web</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <h1>2D Management Sim</h1>
+        <div id="statsLine">Nacitani...</div>
+      </header>
+
+      <main class="main">
+        <canvas id="gameCanvas" width="1280" height="720"></canvas>
+      </main>
+
+      <footer class="bottombar">
+        <div id="hintLine">Pohyb: WASD/sipky | Interakce: E | Menu: M</div>
+        <div id="messageLine">Vitej!</div>
+      </footer>
+    </div>
+
+    <div id="overlay" class="overlay hidden"></div>
+    <script src="./game.js"></script>
+  </body>
+</html>
